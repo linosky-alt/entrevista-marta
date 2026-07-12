@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Entrevista · Marta</title>
+
+<!-- ============================================================
+     ARQUITECTURA DE ESTE ARCHIVO (leer antes de modificar)
+
+     1) CONFIG        → datos que cambian por cliente/agencia (JS, arriba)
+     2) DESIGN TOKENS → todos los colores, tipografías y medidas (CSS :root)
+     3) ESTILOS       → usan SOLO los tokens; se pueden retocar con cuidado
+     4) HTML          → estructura de la página (estados: idle / live / ended)
+     5) MOTOR         → lógica Vapi. *** NO MODIFICAR SALVO NECESIDAD ***
+
+     Para cambiar el aspecto (colores, letra, textos, logo) basta con
+     tocar las secciones 1 y 2. El motor no depende de ninguna clase
+     visual: se comunica con el HTML solo mediante [data-*] y
+     el atributo data-state del <body>. Mientras eso no se toque,
+     cualquier rediseño es seguro.
+     ============================================================ -->
+
+<script>
+/* ================= 1) CONFIG — EDITAR AQUÍ ================= */
+const CONFIG = {
+  // --- Credenciales Vapi (Dashboard → Account → Public Key) ---
+  vapiPublicKey: "PEGA_AQUI_TU_PUBLIC_KEY",
+  assistantId:   "PEGA_AQUI_EL_ID_DEL_ASSISTANT",
+
+  // --- Identidad de la agencia ---
+  agencyName: "Tu Agencia IA",
+  agentName:  "Marta",
+  agentRole:  "Secretaria de dirección · Entrevistas",
+
+  // --- Textos de la interfaz ---
+  copy: {
+    idleTitle:    "Entrevista de diagnóstico",
+    idleSubtitle: "Marta le hará unas preguntas sobre su negocio. Hable con naturalidad: es una conversación, no un formulario.",
+    startButton:  "Iniciar entrevista",
+    connecting:   "Conectando con Marta…",
+    listening:    "Le escucho",
+    speaking:     "Marta está hablando",
+    endButton:    "Terminar",
+    muteButton:   "Silenciar",
+    unmuteButton: "Activar micro",
+    endedTitle:   "Entrevista finalizada",
+    endedBody:    "Gracias por su tiempo. Con esta información prepararemos su estudio personalizado.",
+    restart:      "Nueva entrevista",
+    privacy:      "La conversación se registra únicamente para elaborar su estudio.",
+    errorGeneric: "No se pudo conectar. Compruebe la conexión y el permiso del micrófono.",
+  },
+};
+</script>
+
+<style>
+/* ============ 2) DESIGN TOKENS — LA ZONA DE DISEÑO ============ */
+/* Cambiar valores aquí re-estiliza toda la página sin riesgo.    */
+:root{
+  /* Paleta "Despacho nocturno": tinta profunda + latón cálido */
+  --bg:          #0E1116;   /* fondo general */
+  --bg-raise:    #161B23;   /* tarjetas / superficies elevadas */
+  --ink:         #EDE8DF;   /* texto principal (marfil) */
+  --ink-soft:    #9AA3AF;   /* texto secundario */
+  --accent:      #C8A24A;   /* latón: botones, orbe, detalles */
+  --accent-ink:  #14110A;   /* texto sobre el acento */
+  --danger:      #C25E5E;   /* botón terminar */
+  --line:        #262D38;   /* bordes y separadores */
+
+  /* Tipografía */
+  --font-display:'Cormorant Garamond', Georgia, serif; /* titulares */
+  --font-body:   'Inter', -apple-system, system-ui, sans-serif;
+
+  /* Medidas del orbe (el elemento firma de la página) */
+  --orb-size: clamp(180px, 52vw, 260px);
+
+  /* Ritmo y forma */
+  --radius: 18px;
+  --pad: 24px;
+}
+
+/* ==================== 3) ESTILOS ==================== */
+*{ box-sizing:border-box; margin:0; padding:0; }
+html,body{ height:100%; }
+body{
+  background:var(--bg);
+  color:var(--ink);
+  font-family:var(--font-body);
+  -webkit-font-smoothing:antialiased;
+  display:flex; flex-direction:column;
+  min-height:100dvh;
+  padding:env(safe-area-inset-top) var(--pad) calc(env(safe-area-inset-bottom) + var(--pad));
+}
+
+/* Cabecera de agencia */
+header{
+  display:flex; align-items:center; gap:12px;
+  padding:20px 0 12px;
+}
+.brand-mark{
+  width:34px; height:34px; border-radius:50%;
+  border:1px solid var(--accent);
+  display:grid; place-items:center;
+  font-family:var(--font-display); font-size:19px; color:var(--accent);
+}
+.brand-name{ font-size:14px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft); }
+
+/* Escenario central */
+main{
+  flex:1; display:flex; flex-direction:column;
+  align-items:center; justify-content:center;
+  text-align:center; gap:26px;
+}
+
+/* --- El orbe (firma visual): respira en reposo, late con la voz --- */
+.orb-wrap{ position:relative; width:var(--orb-size); height:var(--orb-size); }
+.orb{
+  position:absolute; inset:0; border-radius:50%;
+  background:
+    radial-gradient(circle at 32% 28%, color-mix(in srgb, var(--accent) 55%, transparent), transparent 62%),
+    radial-gradient(circle at 68% 74%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 58%),
+    var(--bg-raise);
+  border:1px solid var(--line);
+  transition:transform .12s ease-out;
+  animation:breathe 5.5s ease-in-out infinite;
+}
+.orb-ring{
+  position:absolute; inset:-14px; border-radius:50%;
+  border:1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  opacity:0; transform:scale(.92);
+}
+body[data-state="live"] .orb-ring{ animation:ring 2.6s ease-out infinite; }
+.orb-name{
+  position:absolute; inset:0; display:grid; place-items:center;
+  font-family:var(--font-display); font-size:34px; letter-spacing:.04em;
+  color:var(--ink);
+}
+@keyframes breathe{ 0%,100%{transform:scale(1)} 50%{transform:scale(1.035)} }
+@keyframes ring{ 0%{opacity:.55; transform:scale(.94)} 100%{opacity:0; transform:scale(1.22)} }
+@media (prefers-reduced-motion: reduce){
+  .orb,.orb-ring{ animation:none !important; }
+}
+
+h1{
+  font-family:var(--font-display);
+  font-size:clamp(26px, 6.4vw, 34px);
+  font-weight:600; line-height:1.15;
+}
+.subtitle{ color:var(--ink-soft); font-size:15px; line-height:1.55; max-width:34ch; }
+
+/* Estado de la llamada */
+.status{
+  font-size:13px; letter-spacing:.12em; text-transform:uppercase;
+  color:var(--accent); min-height:1.2em;
+}
+.timer{ font-variant-numeric:tabular-nums; color:var(--ink-soft); font-size:14px; }
+
+/* Botonera */
+.controls{ display:flex; gap:14px; align-items:center; justify-content:center; flex-wrap:wrap; }
+button{
+  font-family:var(--font-body); font-size:16px; font-weight:600;
+  border:none; border-radius:999px; cursor:pointer;
+  padding:16px 30px; min-width:200px;
+  transition:transform .06s ease, opacity .2s ease;
+}
+button:active{ transform:scale(.97); }
+button:focus-visible{ outline:2px solid var(--accent); outline-offset:3px; }
+.btn-primary{ background:var(--accent); color:var(--accent-ink); }
+.btn-ghost{
+  background:transparent; color:var(--ink);
+  border:1px solid var(--line); min-width:0; padding:14px 22px;
+}
+.btn-danger{ background:var(--danger); color:#fff; min-width:0; padding:14px 22px; }
+
+/* Aviso de privacidad y errores */
+.privacy{ color:var(--ink-soft); font-size:12px; max-width:40ch; margin-inline:auto; }
+.error{ color:var(--danger); font-size:14px; min-height:1.2em; }
+
+/* --- Máquina de estados visual: qué se ve en cada momento --- */
+[data-show]{ display:none; }
+body[data-state="idle"]   [data-show~="idle"],
+body[data-state="connecting"] [data-show~="connecting"],
+body[data-state="live"]   [data-show~="live"],
+body[data-state="ended"]  [data-show~="ended"]{ display:block; }
+body[data-state="idle"]   .controls[data-show~="idle"],
+body[data-state="live"]   .controls[data-show~="live"],
+body[data-state="ended"]  .controls[data-show~="ended"]{ display:flex; }
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+</head>
+
+<body data-state="idle">
+
+  <!-- ==================== 4) HTML ==================== -->
+  <header>
+    <div class="brand-mark" data-bind="agencyInitial"></div>
+    <div class="brand-name" data-bind="agencyName"></div>
+  </header>
+
+  <main>
+    <div class="orb-wrap">
+      <div class="orb-ring"></div>
+      <div class="orb-ring" style="animation-delay:1.3s"></div>
+      <div class="orb" data-el="orb"></div>
+      <div class="orb-name" data-bind="agentName"></div>
+    </div>
+
+    <div>
+      <h1 data-show="idle connecting" data-bind="idleTitle"></h1>
+      <h1 data-show="ended" data-bind="endedTitle"></h1>
+      <p class="status" data-show="connecting" data-bind="connecting"></p>
+      <p class="status" data-show="live" data-el="liveStatus"></p>
+      <p class="timer" data-show="live" data-el="timer">00:00</p>
+    </div>
+
+    <p class="subtitle" data-show="idle" data-bind="idleSubtitle"></p>
+    <p class="subtitle" data-show="ended" data-bind="endedBody"></p>
+    <p class="error" data-el="error"></p>
+
+    <div class="controls" data-show="idle">
+      <button class="btn-primary" data-action="start" data-bind="startButton"></button>
+    </div>
+    <div class="controls" data-show="live">
+      <button class="btn-ghost"  data-action="mute"></button>
+      <button class="btn-danger" data-action="end" data-bind="endButton"></button>
+    </div>
+    <div class="controls" data-show="ended">
+      <button class="btn-primary" data-action="restart" data-bind="restart"></button>
+    </div>
+
+    <p class="privacy" data-show="idle" data-bind="privacy"></p>
+  </main>
+
+  <!-- ============ 5) MOTOR VAPI — NO MODIFICAR ============ -->
+  <!-- Este bloque solo lee CONFIG y actualiza [data-*].        -->
+  <!-- Ningún cambio de diseño requiere tocar nada de aquí.     -->
+  <script type="module">
+    import Vapi from "https://esm.sh/@vapi-ai/web";
+
+    /* ---- utilidades de interfaz (desacopladas del diseño) ---- */
+    const $  = (sel) => document.querySelector(sel);
+    const $$ = (sel) => document.querySelectorAll(sel);
+    const setState = (s) => { document.body.dataset.state = s; };
+    const el = {
+      orb:    $('[data-el="orb"]'),
+      status: $('[data-el="liveStatus"]'),
+      timer:  $('[data-el="timer"]'),
+      error:  $('[data-el="error"]'),
+      mute:   $('[data-action="mute"]'),
+    };
+
+    /* ---- volcar CONFIG en la página ---- */
+    $$("[data-bind]").forEach(node => {
+      const key = node.dataset.bind;
+      node.textContent =
+        key === "agencyInitial" ? (CONFIG.agencyName || "A").trim()[0].toUpperCase() :
+        key === "agencyName"    ? CONFIG.agencyName :
+        key === "agentName"     ? CONFIG.agentName :
+        CONFIG.copy[key] ?? "";
+    });
+    document.title = `Entrevista · ${CONFIG.agentName}`;
+    el.mute.textContent = CONFIG.copy.muteButton;
+
+    /* ---- estado interno ---- */
+    let vapi = null, muted = false, seconds = 0, clock = null;
+
+    const startClock = () => {
+      seconds = 0;
+      clock = setInterval(() => {
+        seconds++;
+        const m = String(Math.floor(seconds / 60)).padStart(2, "0");
+        const s = String(seconds % 60).padStart(2, "0");
+        el.timer.textContent = `${m}:${s}`;
+      }, 1000);
+    };
+    const stopClock = () => { clearInterval(clock); clock = null; };
+    const showError = (msg) => { el.error.textContent = msg || ""; };
+
+    /* ---- ciclo de vida de la llamada ---- */
+    function initVapi() {
+      vapi = new Vapi(CONFIG.vapiPublicKey);
+
+      vapi.on("call-start", () => {
+        showError("");
+        setState("live");
+        el.status.textContent = CONFIG.copy.listening;
+        startClock();
+      });
+
+      vapi.on("call-end", () => {
+        stopClock();
+        setState("ended");
+        el.orb.style.transform = "";
+      });
+
+      vapi.on("speech-start", () => { el.status.textContent = CONFIG.copy.speaking; });
+      vapi.on("speech-end",   () => { el.status.textContent = CONFIG.copy.listening; });
+
+      /* El orbe late con el volumen de la voz de Marta */
+      vapi.on("volume-level", (v) => {
+        el.orb.style.transform = `scale(${1 + Math.min(v, 1) * 0.14})`;
+      });
+
+      vapi.on("error", (e) => {
+        console.error("[Vapi]", e);
+        stopClock();
+        setState("idle");
+        showError(CONFIG.copy.errorGeneric);
+      });
+    }
+
+    /* ---- acciones de los botones ---- */
+    $('[data-action="start"]').addEventListener("click", async () => {
+      showError("");
+      if (!CONFIG.vapiPublicKey.startsWith("PEGA") && !CONFIG.assistantId.startsWith("PEGA")) {
+        setState("connecting");
+        try {
+          if (!vapi) initVapi();
+          await vapi.start(CONFIG.assistantId);
+        } catch (e) {
+          console.error(e);
+          setState("idle");
+          showError(CONFIG.copy.errorGeneric);
+        }
+      } else {
+        showError("Falta configurar vapiPublicKey y assistantId en CONFIG.");
+      }
+    });
+
+    $('[data-action="end"]').addEventListener("click", () => { vapi?.stop(); });
+
+    $('[data-action="mute"]').addEventListener("click", () => {
+      if (!vapi) return;
+      muted = !muted;
+      vapi.setMuted(muted);
+      el.mute.textContent = muted ? CONFIG.copy.unmuteButton : CONFIG.copy.muteButton;
+    });
+
+    $('[data-action="restart"]').addEventListener("click", () => {
+      el.timer.textContent = "00:00";
+      setState("idle");
+    });
+  </script>
+</body>
+</html>
